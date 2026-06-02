@@ -62,11 +62,17 @@ def run_recursive_loop(question: str, mas: dict, n_rounds: int = 3) -> dict:
         logits_list.append(s_out.logits.detach().cpu())
 
         if is_last:
-            # Generate answer autoregressively from the Solver's latent input
+            # Prepend the original question as text embeddings so the Solver
+            # knows what to answer (latent vectors alone lose the question context).
+            q_enc    = so_tok(question, return_tensors="pt", add_special_tokens=True).to(DEVICE)
+            q_embeds = solver.get_input_embeddings()(q_enc.input_ids)  # [1, q_len, 1536]
+            gen_in   = torch.cat([s_embeds, q_embeds], dim=1)
+            gen_mask = torch.ones(gen_in.shape[:2], dtype=torch.long, device=DEVICE)
+
             with torch.no_grad():
                 gen_ids = solver.generate(
-                    inputs_embeds=s_embeds,
-                    attention_mask=attn_mask,
+                    inputs_embeds=gen_in,
+                    attention_mask=gen_mask,
                     max_new_tokens=256,
                     do_sample=True,
                     temperature=0.6,
