@@ -16,40 +16,50 @@ hardware: zero-gpu
 Prima demo pubblica che rende visibile il ragionamento interno di un Multi-Agent System ricorsivo.
 Basato su [RecursiveMAS](https://arxiv.org/abs/2604.25917) — Stanford · UIUC · NVIDIA · MIT (aprile 2026).
 
-## Demo live
+## Demo
 
-→ *Coming soon su HuggingFace Spaces*
+→ Notebook Colab: scarica `notebooks/day1_setup.ipynb` e aprilo su Google Colab (runtime A100)
+
+## Screenshots
+
+![PCA Journey](assets/screenshot_pca_journey.png)
+*Traiettoria vettoriale completa tra agenti — PCA 2D con tutti e 5 i vettori per round*
+
+![Pipeline Stats](assets/screenshot_pipeline_stats.png)
+*Statistiche pipeline: norma L2 e cosine similarity ad ogni transizione tra agenti*
 
 ## Cosa fa
 
 ### Feature 1 — Monitor spazio latente
 
-Inserisci una domanda. Il sistema esegue 3 round ricorsivi con Sequential-Light
-(Planner → OuterLink → Critic → OuterLink → Solver).
+Il sistema esegue 3 round ricorsivi con Sequential-Light (Planner → Critic → Solver, collegati da OuterLinks trainati). Visualizzazioni live aggiornate dopo ogni round:
 
-**Visualizzazioni live, aggiornate dopo ogni round:**
-
-- **PCA 2D Journey** — traiettoria di tutti e 5 i vettori latenti (Planner, OL12, Critic, OL23, Solver) per ogni round. Frecce colorate per round, frecce viola per i passaggi `outer_31` cross-round
-- **Tabella statistiche pipeline** — norma L2 e cosine similarity ad ogni transizione tra agenti. Le OuterLinks proiettano quasi ortogonalmente (cosine ≈ 0), visibile con il marker `⊥`
-- **Metriche Solver** — cosine similarity tra round, entropia e top-5 confidence
+- **PCA 2D Journey** — traiettoria di tutti e 5 i vettori latenti per ogni round. Frecce colorate per round, frecce viola per i passaggi `outer_31` cross-round. Assi con varianza spiegata (%).
+- **Tabella statistiche pipeline** — norma L2 e cosine similarity ad ogni transizione. Le OuterLinks proiettano quasi ortogonalmente (cosine ≈ 0, marker `⊥`) — ogni agente opera in uno spazio semantico separato.
+- **Metriche Solver per round** — cosine similarity, entropia, top-5 confidence.
 
 ### Feature 2 — Expert (8B) vs Learner (1.7B)
 
-La stessa domanda viene elaborata in 3 round di raffinamento da Expert (Qwen3-8B) e Learner (Qwen3-1.7B).
-Il grafico del delta di similarity si aggiorna live dopo ogni round del Learner.
+La stessa domanda viene elaborata in 3 round di raffinamento da Expert (Qwen3-8B) e Learner (Qwen3-1.7B). Il grafico del delta si aggiorna live dopo ogni round del Learner.
 
-## Architettura
+## Scoperta emergente
+
+Le OuterLinks proiettano in modo **quasi ortogonale** tra agenti (cosine ≈ 0.0–0.06). Non preservano la direzione semantica — la trasformano completamente. Ogni agente riceve un vettore in uno spazio semantico nuovo, non una versione scalata del vettore precedente. Questo non era visualizzato numericamente in nessun lavoro precedente.
+
+## Architettura Sequential-Light
 
 ```
-Round 1:
-  Planner (Qwen3-1.7B) → outer_12 → Critic (Llama3.2-1B) → outer_23 → Solver (Qwen2.5-Math-1.5B)
-                                                                              ↓
-                                                                          outer_31
-                                                                              ↓
-Round 2:                                                               → Planner ...
-```
+Round r:
+  Planner (Qwen3-1.7B)
+    → outer_12 (2048→2048) ⊥
+  Critic (Llama3.2-1B)
+    → outer_23 (2048→1536) ⊥
+  Solver (Qwen2.5-Math-1.5B)
+    → outer_31 (1536→2048)
+  Planner round r+1...
 
-Il Planner genera la risposta finale in italiano usando il contesto latente del Solver proiettato via `outer_31`.
+Round 3 → Planner genera risposta finale in italiano
+```
 
 ## Setup locale
 
@@ -58,20 +68,14 @@ git clone https://github.com/AlexBenin01/LatentScope
 cd LatentScope
 pip install -r requirements.txt
 
-# Serve token HuggingFace per scaricare i modelli RecursiveMAS
-export HF_TOKEN=hf_...
-python app.py
+python app.py   # richiede GPU ≥ 10 GB VRAM per Feature 1
 ```
 
-Richiede GPU con almeno 10 GB VRAM per Feature 1, ~36 GB totali per Feature 1 + Feature 2.
-
-## Test
+## Test (no GPU richiesto)
 
 ```bash
 pytest tests/
 ```
-
-I test non richiedono GPU — usano tensori casuali per verificare shapes e metriche.
 
 ## Paper originale
 
