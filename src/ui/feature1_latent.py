@@ -65,8 +65,13 @@ def _build_pca_journey(agent_vecs_per_round: list) -> plt.Figure:
 
     X   = np.stack(all_vecs)
     X_c = X - X.mean(axis=0)
-    _, _, Vt = np.linalg.svd(X_c, full_matrices=False)
+    _, S, Vt = np.linalg.svd(X_c, full_matrices=False)
     coords = X_c @ Vt[:2].T   # [n_total, 2]
+
+    # Fix 3: variance explained for axis labels
+    var = S ** 2
+    pc1_pct = var[0] / var.sum() * 100
+    pc2_pct = var[1] / var.sum() * 100
 
     fig, ax = plt.subplots(figsize=(14, 6))
     n_agents = len(_KEYS)
@@ -99,10 +104,11 @@ def _build_pca_journey(agent_vecs_per_round: list) -> plt.Figure:
                             textcoords="offset points", xytext=(7, 5),
                             fontsize=8.5, color=_AGENT_COLORS[k], fontweight="bold")
 
-        # Round badge near Planner
+        # Fix 1: alternate badge y-offset to avoid overlap when Planners are close
+        badge_y = [-14, 0, 14][r_idx]
         ax.annotate(f" R{r_idx+1} ",
                     (rc[0, 0], rc[0, 1]),
-                    textcoords="offset points", xytext=(-28, 0),
+                    textcoords="offset points", xytext=(-32, badge_y),
                     fontsize=8, fontweight="bold",
                     color="white",
                     bbox=dict(boxstyle="round,pad=0.25",
@@ -124,8 +130,8 @@ def _build_pca_journey(agent_vecs_per_round: list) -> plt.Figure:
         "Traiettoria vettoriale completa tra agenti (PCA 2D)\n"
         "Ogni punto = vettore latente (ultimo token) — frecce colorate = round, viola = outer_31",
         fontsize=10)
-    ax.set_xlabel("PC1", fontsize=9)
-    ax.set_ylabel("PC2", fontsize=9)
+    ax.set_xlabel(f"PC1 ({pc1_pct:.0f}% var. spiegata)", fontsize=9)
+    ax.set_ylabel(f"PC2 ({pc2_pct:.0f}% var. spiegata)", fontsize=9)
     ax.grid(True, alpha=0.2)
 
     # Legend
@@ -159,7 +165,12 @@ def _build_stats_md(pipeline_stats: list) -> str:
         lines.append("|--------|------:|--------:|----------------------:|")
         for s in stages:
             delta_str = f"{s['delta']:+.0f}%" if s["delta"] is not None else "—"
-            cos_str   = f"{s['cos']:.3f}"      if s["cos"]   is not None else "—"
+            if s["cos"] is None:
+                cos_str = "—"
+            elif abs(s["cos"]) < 0.05:
+                cos_str = f"{s['cos']:.3f} ⊥"   # near-orthogonal projection
+            else:
+                cos_str = f"{s['cos']:.3f}"
             lines.append(f"| {s['label']} | {s['norm']:.1f} | {delta_str} | {cos_str} |")
         lines.append("")
 
