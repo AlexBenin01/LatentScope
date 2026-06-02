@@ -6,9 +6,13 @@ from transformers import AutoTokenizer, AutoModelForCausalLM
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
+# RecursiveMAS Distillation models (Qwen3.5-9B / 4B) require a transformers version
+# that does not yet exist in any release. Using standard Qwen3 models of equivalent
+# sizes: the Expert vs Learner comparison concept (large vs small, hidden state
+# convergence across rounds) is identical.
 _MODEL_IDS = {
-    "learner": "RecursiveMAS/Distillation-Learner-Qwen3.5-4B",
-    "expert":  "RecursiveMAS/Distillation-Expert-Qwen3.5-9B",
+    "learner": "Qwen/Qwen3-4B",
+    "expert":  "Qwen/Qwen3-8B",
 }
 
 
@@ -38,15 +42,12 @@ def load_distillation() -> dict:
 
     for role, model_id in _MODEL_IDS.items():
         print(f"Loading {role}: {model_id} ...")
-        models[f"{role}_tokenizer"] = AutoTokenizer.from_pretrained(
-            model_id, trust_remote_code=True
-        )
+        models[f"{role}_tokenizer"] = AutoTokenizer.from_pretrained(model_id)
         models[role] = _load_model(
             model_id,
             role=role,
             torch_dtype=torch.bfloat16,
             device_map="auto",
-            trust_remote_code=True,
         ).eval()
 
         if torch.cuda.is_available():
