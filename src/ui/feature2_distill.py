@@ -110,7 +110,8 @@ def _run(question: str):
     )
 
 
-def build_distill_tab() -> None:
+def build_distill_tab(run_fn=None) -> None:
+    fn = run_fn if run_fn is not None else _run
     gr.Markdown("### Expert (8B) vs Learner (1.7B) — 3 round di raffinamento")
     gr.Markdown(
         "La stessa domanda viene elaborata in 3 round di raffinamento iterativo da Expert e Learner. "
@@ -137,7 +138,7 @@ def build_distill_tab() -> None:
         speedup      = gr.Number(label="Speedup Learner (×)", precision=2)
 
     run_btn.click(
-        fn=_run,
+        fn=fn,
         inputs=[question_input],
         outputs=[expert_out, learner_out, delta_plot, status,
                  expert_time, learner_time, speedup],

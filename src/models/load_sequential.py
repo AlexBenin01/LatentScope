@@ -73,7 +73,8 @@ def _load_outer_link(key: str, filename: str) -> OuterLink:
     adapter = OuterLink(in_dim, out_dim, mid_dim)
     adapter.load_state_dict(raw, strict=True)
 
-    return adapter.to(torch.bfloat16).to(DEVICE).eval()
+    # Keep on CPU — inference code moves to the correct device at call time
+    return adapter.to(torch.bfloat16).eval()
 
 
 def _load_model(model_id: str, role: str, **kwargs) -> AutoModelForCausalLM:

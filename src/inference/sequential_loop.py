@@ -1,6 +1,9 @@
 import torch
 
-DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+def _dev() -> str:
+    """Resolved at call time — safe for ZeroGPU where CUDA appears only during @spaces.GPU."""
+    return "cuda" if torch.cuda.is_available() else "cpu"
 
 _IT_PREFIX = "Rispondi in italiano in modo chiaro e dettagliato.\n\n"
 
@@ -25,14 +28,17 @@ def stream_recursive_loop(question: str, mas: dict, n_rounds: int = 3):
     Each yield: {"round": int, "hidden_states": list, "logits": list, "answer": str|None}
     answer is set only on the last round.
     """
+    device = _dev()
+
     planner  = mas["planner"]
     critic   = mas["critic"]
     solver   = mas["solver"]
     pl_tok   = mas["planner_tokenizer"]
     so_tok   = mas["solver_tokenizer"]
-    outer_12 = mas["outer_12"]
-    outer_23 = mas["outer_23"]
-    outer_31 = mas["outer_31"]
+    # Move OuterLinks to inference device (kept on CPU at load time for ZeroGPU compat)
+    outer_12 = mas["outer_12"].to(device)
+    outer_23 = mas["outer_23"].to(device)
+    outer_31 = mas["outer_31"].to(device)
 
     hidden_states    = []
     logits_list      = []
@@ -41,7 +47,7 @@ def stream_recursive_loop(question: str, mas: dict, n_rounds: int = 3):
 
     # Round 1: tokenize the question with an Italian prefix
     it_question    = _IT_PREFIX + question
-    enc            = pl_tok(it_question, return_tensors="pt").to(DEVICE)
+    enc            = pl_tok(it_question, return_tensors="pt").to(device)
     planner_kwargs = {"input_ids": enc.input_ids, "attention_mask": enc.attention_mask}
 
     for round_idx in range(n_rounds):
@@ -54,7 +60,7 @@ def stream_recursive_loop(question: str, mas: dict, n_rounds: int = 3):
 
         # Planner -> Critic
         c_embeds  = outer_12(p_hs)
-        attn_mask = torch.ones(c_embeds.shape[:2], dtype=torch.long, device=DEVICE)
+        attn_mask = torch.ones(c_embeds.shape[:2], dtype=torch.long, device=device)
 
         # Critic
         with torch.no_grad():
@@ -64,7 +70,7 @@ def stream_recursive_loop(question: str, mas: dict, n_rounds: int = 3):
 
         # Critic -> Solver
         s_embeds  = outer_23(c_hs)
-        attn_mask = torch.ones(s_embeds.shape[:2], dtype=torch.long, device=DEVICE)
+        attn_mask = torch.ones(s_embeds.shape[:2], dtype=torch.long, device=device)
 
         # Solver forward (always — for hidden states and logits)
         with torch.no_grad():
@@ -85,7 +91,7 @@ def stream_recursive_loop(question: str, mas: dict, n_rounds: int = 3):
 
         # Project Solver output back to Planner space (used for next round OR final answer)
         sp_embeds = outer_31(s_out.hidden_states[-1])   # [1, seq, 2048]
-        sp_mask   = torch.ones(sp_embeds.shape[:2], dtype=torch.long, device=DEVICE)
+        sp_mask   = torch.ones(sp_embeds.shape[:2], dtype=torch.long, device=device)
 
         if is_last:
             # Generate answer with the Planner (Qwen3-1.7B):
@@ -94,10 +100,10 @@ def stream_recursive_loop(question: str, mas: dict, n_rounds: int = 3):
             # 3-round reasoning cycle via the projected latent state.
             it_prompt = _apply_chat_template(pl_tok, question)
             q_enc     = pl_tok(it_prompt, return_tensors="pt",
-                                add_special_tokens=False).to(DEVICE)
+                                add_special_tokens=False).to(device)
             q_embeds  = planner.get_input_embeddings()(q_enc.input_ids)
             gen_in    = torch.cat([sp_embeds, q_embeds], dim=1)
-            gen_mask  = torch.ones(gen_in.shape[:2], dtype=torch.long, device=DEVICE)
+            gen_mask  = torch.ones(gen_in.shape[:2], dtype=torch.long, device=device)
 
             with torch.no_grad():
                 gen_ids = planner.generate(
@@ -141,6 +147,7 @@ def stream_distillation_loop(question: str, models: dict, role: str, n_rounds: i
     Generator — runs n_rounds of iterative refinement for Expert or Learner.
     Yields after each round: {"round": int, "answer": str, "hidden_states": list, "logits": list}
     """
+    device    = _dev()
     model     = models[role]
     tokenizer = models[f"{role}_tokenizer"]
 
@@ -158,7 +165,7 @@ def stream_distillation_loop(question: str, models: dict, role: str, n_rounds: i
         )
         prompt = _apply_chat_template(tokenizer, question, context)
         enc    = tokenizer(prompt, return_tensors="pt",
-                           truncation=True, max_length=1024).to(DEVICE)
+                           truncation=True, max_length=1024).to(device)
 
         with torch.no_grad():
             fwd = model(**enc, output_hidden_states=True)

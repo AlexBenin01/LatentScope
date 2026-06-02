@@ -242,7 +242,9 @@ def _run(question: str):
 
 # ── Gradio tab builder ──────────────────────────────────────────────────────────
 
-def build_latent_tab() -> None:
+def build_latent_tab(run_fn=None) -> None:
+    """run_fn defaults to the local _run; app.py passes a @spaces.GPU-wrapped version."""
+    fn = run_fn if run_fn is not None else _run
     gr.Markdown("### Visualizza il passaggio vettoriale tra agenti — round per round")
     gr.Markdown(
         "Ogni round: **Planner → OuterLink12 → Critic → OuterLink23 → Solver → OuterLink31**. "
@@ -285,7 +287,7 @@ def build_latent_tab() -> None:
         """)
 
     run_btn.click(
-        fn=_run,
+        fn=fn,
         inputs=[question_input],
         outputs=[pca_chart, stats_panel, metric_bars, status, answer_out],
     )
