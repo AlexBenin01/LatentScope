@@ -39,23 +39,26 @@ _OUTER_FILES = {
 
 class OuterLink(nn.Module):
     """
-    outer_ln_res_adapter — actual architecture inferred from checkpoint keys:
-        x -> ln_source -> proj1 -> ln_target -> proj2 -> (+ residual_proj(x))
+    outer_ln_res_adapter — architecture confirmed from checkpoint shapes:
 
+        h = proj2( proj1( ln_source(x) ) )     # expand then reduce
+        return ln_target( h + residual_proj(x) )
+
+    ln_target normalizes the final output (out_dim), NOT the intermediate (mid_dim).
     mid_dim is inferred from proj1.weight.shape[0] at load time.
     """
 
     def __init__(self, in_dim: int, out_dim: int, mid_dim: int):
         super().__init__()
         self.ln_source     = nn.LayerNorm(in_dim)
-        self.proj1         = nn.Linear(in_dim,   mid_dim)
-        self.ln_target     = nn.LayerNorm(mid_dim)
-        self.proj2         = nn.Linear(mid_dim,  out_dim)
-        self.residual_proj = nn.Linear(in_dim,   out_dim)
+        self.proj1         = nn.Linear(in_dim,  mid_dim)
+        self.proj2         = nn.Linear(mid_dim, out_dim)
+        self.ln_target     = nn.LayerNorm(out_dim)          # out_dim, not mid_dim
+        self.residual_proj = nn.Linear(in_dim,  out_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        h = self.proj2(self.ln_target(self.proj1(self.ln_source(x))))
-        return h + self.residual_proj(x)
+        h = self.proj2(self.proj1(self.ln_source(x)))
+        return self.ln_target(h + self.residual_proj(x))
 
 
 def _load_outer_link(key: str, filename: str) -> OuterLink:
