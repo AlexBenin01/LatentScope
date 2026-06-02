@@ -34,7 +34,8 @@ def compute_round_metrics(
         last_logits = lgt[0, -1, :].float()
         probs = F.softmax(last_logits, dim=-1).numpy()
         m["entropy"]    = float(scipy_entropy(probs))
-        m["confidence"] = float(probs.max())
+        # top-5 sum: more readable than max on large vocabularies (32k+ tokens)
+        m["confidence"] = float(np.sort(probs)[-5:].sum())
 
         metrics.append(m)
 

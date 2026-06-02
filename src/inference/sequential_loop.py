@@ -73,28 +73,36 @@ def stream_recursive_loop(question: str, mas: dict, n_rounds: int = 3):
         hidden_states.append(s_out.hidden_states[-1][:, -1, :].squeeze(0).detach().cpu())
         logits_list.append(s_out.logits.detach().cpu())
 
+        # Project Solver output back to Planner space (used for next round OR final answer)
+        sp_embeds = outer_31(s_out.hidden_states[-1])   # [1, seq, 2048]
+        sp_mask   = torch.ones(sp_embeds.shape[:2], dtype=torch.long, device=DEVICE)
+
         if is_last:
-            # Prepend original question (no Italian prefix — Solver is a math model)
-            q_enc    = so_tok(question, return_tensors="pt",
-                               add_special_tokens=True).to(DEVICE)
-            q_embeds = solver.get_input_embeddings()(q_enc.input_ids)
-            gen_in   = torch.cat([s_embeds, q_embeds], dim=1)
-            gen_mask = torch.ones(gen_in.shape[:2], dtype=torch.long, device=DEVICE)
+            # Generate answer with the Planner (Qwen3-1.7B):
+            #   input = [Solver→outer_31 latent context] + [Italian question text]
+            # The Planner follows Italian instructions and has seen the full
+            # 3-round reasoning cycle via the projected latent state.
+            it_prompt = _apply_chat_template(pl_tok, question)
+            q_enc     = pl_tok(it_prompt, return_tensors="pt",
+                                add_special_tokens=False).to(DEVICE)
+            q_embeds  = planner.get_input_embeddings()(q_enc.input_ids)
+            gen_in    = torch.cat([sp_embeds, q_embeds], dim=1)
+            gen_mask  = torch.ones(gen_in.shape[:2], dtype=torch.long, device=DEVICE)
 
             with torch.no_grad():
-                gen_ids = solver.generate(
+                gen_ids = planner.generate(
                     inputs_embeds=gen_in,
                     attention_mask=gen_mask,
-                    max_new_tokens=256,
-                    do_sample=False,          # greedy — more stable for math
-                    repetition_penalty=1.3,   # prevents token loops
-                    pad_token_id=so_tok.eos_token_id,
+                    max_new_tokens=350,
+                    do_sample=True,
+                    temperature=0.6,
+                    top_p=0.95,
+                    repetition_penalty=1.1,
+                    pad_token_id=pl_tok.eos_token_id,
                 )
-            answer = so_tok.decode(gen_ids[0], skip_special_tokens=True)
+            answer = pl_tok.decode(gen_ids[0], skip_special_tokens=True)
         else:
-            sp_embeds      = outer_31(s_out.hidden_states[-1])
-            attn_mask      = torch.ones(sp_embeds.shape[:2], dtype=torch.long, device=DEVICE)
-            planner_kwargs = {"inputs_embeds": sp_embeds, "attention_mask": attn_mask}
+            planner_kwargs = {"inputs_embeds": sp_embeds, "attention_mask": sp_mask}
 
         yield {
             "round":         round_idx + 1,

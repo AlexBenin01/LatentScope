@@ -57,7 +57,7 @@ def _build_charts(hidden_states: list, metrics: list) -> plt.Figure:
                             xy=(coords[i+1, 0], coords[i+1, 1]),
                             xytext=(coords[i, 0], coords[i, 1]),
                             arrowprops=dict(arrowstyle="->", color="#888888",
-                                            lw=1.8, connectionstyle="arc3,rad=0.1"))
+                                            lw=1.8, connectionstyle="arc3,rad=0.0"))
         ax_pca.set_title(
             "Traiettoria dello spazio latente (PCA 2D)\n"
             "Ogni punto = rappresentazione interna del Solver dopo quel round",
@@ -82,7 +82,12 @@ def _build_charts(hidden_states: list, metrics: list) -> plt.Figure:
 
     bar_colors = [colors[i] for i in range(n)]
 
-    ax_sim.bar(rounds, sims, color=bar_colors)
+    # Round 1 has no previous round — show it as a gray N/A bar
+    sim_colors = ["#BBBBBB"] + bar_colors[1:]
+    ax_sim.bar(rounds, sims, color=sim_colors)
+    if sims[0] == 0.0:
+        ax_sim.text(1, 0.02, "N/A", ha="center", va="bottom",
+                    fontsize=8, color="#666666", style="italic")
     ax_sim.set_title("Cosine Similarity\n(vs round precedente)")
     ax_sim.set_ylim(0, 1); ax_sim.set_xticks([1, 2, 3])
     ax_sim.set_xlabel("Round")
@@ -92,7 +97,7 @@ def _build_charts(hidden_states: list, metrics: list) -> plt.Figure:
     ax_ent.set_xticks([1, 2, 3]); ax_ent.set_xlabel("Round")
 
     ax_conf.bar(rounds, confidences, color=bar_colors)
-    ax_conf.set_title("Confidence output")
+    ax_conf.set_title("Top-5 Confidence\n(somma 5 token più probabili)")
     ax_conf.set_ylim(0, 1); ax_conf.set_xticks([1, 2, 3])
     ax_conf.set_xlabel("Round")
 
