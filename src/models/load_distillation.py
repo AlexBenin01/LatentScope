@@ -11,7 +11,7 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 # sizes: the Expert vs Learner comparison concept (large vs small, hidden state
 # convergence across rounds) is identical.
 _MODEL_IDS = {
-    "learner": "Qwen/Qwen3-4B",
+    "learner": "Qwen/Qwen3-1.7B",  # same arch as Planner — confirmed working
     "expert":  "Qwen/Qwen3-8B",
 }
 
