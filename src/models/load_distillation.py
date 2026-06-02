@@ -38,12 +38,15 @@ def load_distillation() -> dict:
 
     for role, model_id in _MODEL_IDS.items():
         print(f"Loading {role}: {model_id} ...")
-        models[f"{role}_tokenizer"] = AutoTokenizer.from_pretrained(model_id)
+        models[f"{role}_tokenizer"] = AutoTokenizer.from_pretrained(
+            model_id, trust_remote_code=True
+        )
         models[role] = _load_model(
             model_id,
             role=role,
             torch_dtype=torch.bfloat16,
             device_map="auto",
+            trust_remote_code=True,
         ).eval()
 
         if torch.cuda.is_available():
