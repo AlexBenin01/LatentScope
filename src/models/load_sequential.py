@@ -38,35 +38,37 @@ _OUTER_FILES = {
 
 
 class OuterLink(nn.Module):
-    """outer_ln_res_adapter: LayerNorm -> Linear, residual when in_dim == out_dim."""
+    """
+    outer_ln_res_adapter — actual architecture inferred from checkpoint keys:
+        x -> ln_source -> proj1 -> ln_target -> proj2 -> (+ residual_proj(x))
 
-    def __init__(self, in_dim: int, out_dim: int):
+    mid_dim is inferred from proj1.weight.shape[0] at load time.
+    """
+
+    def __init__(self, in_dim: int, out_dim: int, mid_dim: int):
         super().__init__()
-        self.norm = nn.LayerNorm(in_dim)
-        self.proj = nn.Linear(in_dim, out_dim, bias=False)
-        self._has_residual = (in_dim == out_dim)
+        self.ln_source     = nn.LayerNorm(in_dim)
+        self.proj1         = nn.Linear(in_dim,   mid_dim)
+        self.ln_target     = nn.LayerNorm(mid_dim)
+        self.proj2         = nn.Linear(mid_dim,  out_dim)
+        self.residual_proj = nn.Linear(in_dim,   out_dim)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
-        h = self.proj(self.norm(x))
-        return h + x if self._has_residual else h
+        h = self.proj2(self.ln_target(self.proj1(self.ln_source(x))))
+        return h + self.residual_proj(x)
 
 
 def _load_outer_link(key: str, filename: str) -> OuterLink:
     in_dim, out_dim = _OUTER_DIMS[key]
-    adapter = OuterLink(in_dim, out_dim)
 
     path = hf_hub_download(repo_id=_OUTERLINKS_REPO, filename=filename)
-    raw = torch.load(path, map_location="cpu", weights_only=True)
+    raw  = torch.load(path, map_location="cpu", weights_only=True)
 
-    # Normalize key names — handle ln.*/norm.* and linear.*/proj.* variants
-    _alias = {
-        "ln.weight": "norm.weight",
-        "ln.bias":   "norm.bias",
-        "linear.weight": "proj.weight",
-        "fc.weight": "proj.weight",
-    }
-    state = {_alias.get(k, k): v for k, v in raw.items()}
-    adapter.load_state_dict(state, strict=True)
+    # Infer mid_dim from the actual proj1 weight shape (proj1.weight: [mid, in])
+    mid_dim = raw["proj1.weight"].shape[0]
+
+    adapter = OuterLink(in_dim, out_dim, mid_dim)
+    adapter.load_state_dict(raw, strict=True)
 
     return adapter.to(torch.bfloat16).to(DEVICE).eval()
 
