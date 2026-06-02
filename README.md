@@ -80,4 +80,4 @@ UIUC · Stanford University · NVIDIA · MIT
 
 ## Licenza
 
-Apache 2.0
+MIT
