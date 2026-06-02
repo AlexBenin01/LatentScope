@@ -74,8 +74,8 @@ def stream_recursive_loop(question: str, mas: dict, n_rounds: int = 3):
         logits_list.append(s_out.logits.detach().cpu())
 
         if is_last:
-            # Prepend original question text so the Solver knows what to answer
-            q_enc    = so_tok(_IT_PREFIX + question, return_tensors="pt",
+            # Prepend original question (no Italian prefix — Solver is a math model)
+            q_enc    = so_tok(question, return_tensors="pt",
                                add_special_tokens=True).to(DEVICE)
             q_embeds = solver.get_input_embeddings()(q_enc.input_ids)
             gen_in   = torch.cat([s_embeds, q_embeds], dim=1)
@@ -85,10 +85,9 @@ def stream_recursive_loop(question: str, mas: dict, n_rounds: int = 3):
                 gen_ids = solver.generate(
                     inputs_embeds=gen_in,
                     attention_mask=gen_mask,
-                    max_new_tokens=300,
-                    do_sample=True,
-                    temperature=0.6,
-                    top_p=0.95,
+                    max_new_tokens=256,
+                    do_sample=False,          # greedy — more stable for math
+                    repetition_penalty=1.3,   # prevents token loops
                     pad_token_id=so_tok.eos_token_id,
                 )
             answer = so_tok.decode(gen_ids[0], skip_special_tokens=True)
