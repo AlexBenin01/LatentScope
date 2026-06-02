@@ -71,30 +71,29 @@ def _load_outer_link(key: str, filename: str) -> OuterLink:
     return adapter.to(torch.bfloat16).to(DEVICE).eval()
 
 
-def _load_model(model_id: str, **kwargs) -> AutoModelForCausalLM:
+def _load_model(model_id: str, role: str, **kwargs) -> AutoModelForCausalLM:
     """
-    Downloads the model locally and loads it, bypassing RecursiveMAS's
-    non-standard adapter_config.json that breaks transformers' PEFT detection.
-    """
-    local_dir   = snapshot_download(repo_id=model_id)
-    adapter_cfg = os.path.join(local_dir, "adapter_config.json")
-    backup      = adapter_cfg + ".bak"
-    hidden      = False
+    Downloads the model to a role-specific temp dir and loads it, bypassing
+    RecursiveMAS's non-standard adapter_config.json (only {adapter_type: ln_res_adapter})
+    that breaks transformers' PEFT auto-detection.
 
+    HF cache uses symlinks — moving a symlink doesn't hide the file from
+    from_pretrained. Downloading to a fresh local_dir creates actual files
+    (or local symlinks we control), so we can safely delete adapter_config.json.
+    """
+    local_dir = f"/tmp/mas_{role}"
+    os.makedirs(local_dir, exist_ok=True)
+
+    snapshot_download(repo_id=model_id, local_dir=local_dir)
+
+    adapter_cfg = os.path.join(local_dir, "adapter_config.json")
     if os.path.exists(adapter_cfg):
         with open(adapter_cfg) as f:
             cfg = json.load(f)
         if "base_model_name_or_path" not in cfg:
-            shutil.move(adapter_cfg, backup)
-            hidden = True
+            os.remove(adapter_cfg)
 
-    try:
-        model = AutoModelForCausalLM.from_pretrained(local_dir, **kwargs)
-    finally:
-        if hidden:
-            shutil.move(backup, adapter_cfg)
-
-    return model
+    return AutoModelForCausalLM.from_pretrained(local_dir, **kwargs)
 
 
 def load_sequential_light(task: str = "math") -> dict:
@@ -110,6 +109,7 @@ def load_sequential_light(task: str = "math") -> dict:
         mas[f"{role}_tokenizer"] = AutoTokenizer.from_pretrained(model_id)
         mas[role] = _load_model(
             model_id,
+            role=role,
             torch_dtype=torch.bfloat16,
             device_map="auto",
         ).eval()
