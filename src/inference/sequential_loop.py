@@ -34,9 +34,10 @@ def stream_recursive_loop(question: str, mas: dict, n_rounds: int = 3):
     outer_23 = mas["outer_23"]
     outer_31 = mas["outer_31"]
 
-    hidden_states = []
-    logits_list   = []
-    answer        = None
+    hidden_states    = []
+    logits_list      = []
+    agent_vecs_list  = []   # all 5 intermediate last-token vectors per round
+    answer           = None
 
     # Round 1: tokenize the question with an Italian prefix
     it_question    = _IT_PREFIX + question
@@ -73,6 +74,15 @@ def stream_recursive_loop(question: str, mas: dict, n_rounds: int = 3):
         hidden_states.append(s_out.hidden_states[-1][:, -1, :].squeeze(0).detach().cpu())
         logits_list.append(s_out.logits.detach().cpu())
 
+        # Capture all 5 intermediate last-token vectors for visualization
+        agent_vecs_list.append({
+            "planner":  p_hs[:, -1, :].squeeze(0).detach().cpu().float(),
+            "outer_12": c_embeds[:, -1, :].squeeze(0).detach().cpu().float(),
+            "critic":   c_hs[:, -1, :].squeeze(0).detach().cpu().float(),
+            "outer_23": s_embeds[:, -1, :].squeeze(0).detach().cpu().float(),
+            "solver":   s_out.hidden_states[-1][:, -1, :].squeeze(0).detach().cpu().float(),
+        })
+
         # Project Solver output back to Planner space (used for next round OR final answer)
         sp_embeds = outer_31(s_out.hidden_states[-1])   # [1, seq, 2048]
         sp_mask   = torch.ones(sp_embeds.shape[:2], dtype=torch.long, device=DEVICE)
@@ -108,6 +118,7 @@ def stream_recursive_loop(question: str, mas: dict, n_rounds: int = 3):
             "round":         round_idx + 1,
             "hidden_states": list(hidden_states),
             "logits":        list(logits_list),
+            "agent_vecs":    list(agent_vecs_list),
             "answer":        answer,
         }
 
@@ -118,7 +129,7 @@ def run_recursive_loop(question: str, mas: dict, n_rounds: int = 3) -> dict:
     for r in stream_recursive_loop(question, mas, n_rounds):
         result = r
     return {"answer": result["answer"], "hidden_states": result["hidden_states"],
-            "logits": result["logits"]}
+            "logits": result["logits"], "agent_vecs": result["agent_vecs"]}
 
 
 # ---------------------------------------------------------------------------

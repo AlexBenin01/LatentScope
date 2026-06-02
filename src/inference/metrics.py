@@ -42,6 +42,45 @@ def compute_round_metrics(
     return metrics
 
 
+_PIPELINE_KEYS   = ["planner", "outer_12", "critic", "outer_23", "solver"]
+_PIPELINE_LABELS = ["Planner", "→ outer_12 →", "Critic", "→ outer_23 →", "Solver"]
+
+
+def compute_pipeline_stats(agent_vecs_per_round: list) -> list:
+    """
+    For each round, compute norm and cosine similarity at each pipeline stage.
+
+    Returns a list of dicts (one per round), each with a list of stage dicts:
+        {label, norm, cos_with_prev, norm_delta_pct}
+    cos_with_prev and norm_delta_pct are None for the first stage.
+    """
+    rounds_stats = []
+    for vecs in agent_vecs_per_round:
+        stage_stats = []
+        for i, key in enumerate(_PIPELINE_KEYS):
+            v = vecs[key].float()
+            norm = float(torch.norm(v))
+            if i == 0:
+                cos = None
+                delta = None
+            else:
+                prev = vecs[_PIPELINE_KEYS[i - 1]].float()
+                min_dim = min(len(v), len(prev))
+                cos = float(F.cosine_similarity(
+                    prev[:min_dim].unsqueeze(0), v[:min_dim].unsqueeze(0)
+                ))
+                prev_norm = float(torch.norm(prev))
+                delta = (norm - prev_norm) / prev_norm * 100 if prev_norm > 0 else 0.0
+            stage_stats.append({
+                "label": _PIPELINE_LABELS[i],
+                "norm":  round(norm, 2),
+                "cos":   round(cos, 4) if cos is not None else None,
+                "delta": round(delta, 1) if delta is not None else None,
+            })
+        rounds_stats.append(stage_stats)
+    return rounds_stats
+
+
 def compute_expert_learner_delta(
     expert_hidden: List[torch.Tensor],
     learner_hidden: List[torch.Tensor],
