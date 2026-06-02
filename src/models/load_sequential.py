@@ -1,6 +1,9 @@
+import json
+import os
+import shutil
 import torch
 import torch.nn as nn
-from huggingface_hub import hf_hub_download
+from huggingface_hub import hf_hub_download, snapshot_download
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
@@ -68,6 +71,32 @@ def _load_outer_link(key: str, filename: str) -> OuterLink:
     return adapter.to(torch.bfloat16).to(DEVICE).eval()
 
 
+def _load_model(model_id: str, **kwargs) -> AutoModelForCausalLM:
+    """
+    Downloads the model locally and loads it, bypassing RecursiveMAS's
+    non-standard adapter_config.json that breaks transformers' PEFT detection.
+    """
+    local_dir   = snapshot_download(repo_id=model_id)
+    adapter_cfg = os.path.join(local_dir, "adapter_config.json")
+    backup      = adapter_cfg + ".bak"
+    hidden      = False
+
+    if os.path.exists(adapter_cfg):
+        with open(adapter_cfg) as f:
+            cfg = json.load(f)
+        if "base_model_name_or_path" not in cfg:
+            shutil.move(adapter_cfg, backup)
+            hidden = True
+
+    try:
+        model = AutoModelForCausalLM.from_pretrained(local_dir, **kwargs)
+    finally:
+        if hidden:
+            shutil.move(backup, adapter_cfg)
+
+    return model
+
+
 def load_sequential_light(task: str = "math") -> dict:
     """
     Loads Planner, Critic, Solver + the 3 OuterLink adapters.
@@ -79,7 +108,7 @@ def load_sequential_light(task: str = "math") -> dict:
     for role, model_id in _MODEL_IDS.items():
         print(f"Loading {role}: {model_id} ...")
         mas[f"{role}_tokenizer"] = AutoTokenizer.from_pretrained(model_id)
-        mas[role] = AutoModelForCausalLM.from_pretrained(
+        mas[role] = _load_model(
             model_id,
             torch_dtype=torch.bfloat16,
             device_map="auto",
