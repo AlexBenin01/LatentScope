@@ -1,110 +1,111 @@
 # Post LinkedIn — RecursiveMAS Latent Visualizer
+# Un post unico, completo
 
 ---
 
-## POST 1 — Hook teorico
-**Quando pubblicare**: oggi o domani
-**Formato**: testo + screenshot della prima pagina del paper
+## ISTRUZIONI DI PUBBLICAZIONE
+
+- Allega in ordine: screenshot PCA Journey, screenshot tabella statistiche
+- Pubblica martedì o giovedì, ore 8-10 oppure 17-19
+- Rispondi a tutti i commenti nelle prime 2 ore
+- Tagga gli autori del paper se li trovi su LinkedIn: cerca "Jiaru Zou RecursiveMAS"
 
 ---
 
-Questo paper ha 5 settimane ed è già il progetto più interessante che ho visto nel 2026.
-
-RecursiveMAS (Stanford / UIUC / NVIDIA / MIT) risolve un problema che nessun Multi-Agent System aveva ancora affrontato: il costo di far "parlare" gli agenti tra loro in testo.
-
-La soluzione? Far collaborare gli agenti direttamente nello spazio latente, senza mai convertire i pensieri intermedi in parole.
-
-Risultato: +8.3% accuracy, 2.4× più veloce, −75% token rispetto ai MAS classici.
-
-E i modelli sono già su HuggingFace, open-weight e modificabili.
-
-Ho costruito qualcosa con questo. Vi mostro cosa succede "sotto il cofano" di questi agenti.
-
-Seguite per i prossimi aggiornamenti.
-
-[screenshot paper]
-
-#MultiAgentSystems #LLM #AIResearch #OpenSource #RecursiveMAS
+## IL POST
 
 ---
 
-**Tag suggeriti**: cerca su LinkedIn "Jiaru Zou" e gli autori del paper — metti un tag se li trovi.
+Ho visualizzato per la prima volta cosa succede davvero quando tre modelli linguistici si "parlano" nello spazio latente.
+
+Il risultato è inaspettato.
 
 ---
 
-## POST 2 — Behind the scenes
-**Quando pubblicare**: 3-4 giorni dopo il Post 1
-**Formato**: testo + screenshot PCA Journey (assets/screenshot_pca_journey.png) + screenshot pipeline stats (assets/screenshot_pipeline_stats.png)
+**Il contesto**
+
+RecursiveMAS è un paper di Stanford / UIUC / NVIDIA / MIT uscito ad aprile 2026.
+L'idea: far collaborare più LLM senza che si scambino testo — solo vettori latenti, attraverso moduli chiamati OuterLinks.
+
+Risultato dichiarato nel paper: +8.3% accuracy, 2.4× più veloce, −75% di token rispetto ai MAS classici.
+
+I modelli sono open-weight su HuggingFace. Nessuno aveva ancora aperto il cofano.
 
 ---
 
-Aggiornamento su quello che sto costruendo con RecursiveMAS.
+**Cosa ho costruito**
 
-Ho estratto i vettori latenti mentre passano da un agente all'altro durante i round ricorsivi.
+Un visualizzatore che, durante i 3 round ricorsivi del sistema, estrae e mostra:
 
-[screenshot PCA Journey]
+→ La **traiettoria PCA 2D** di tutti i vettori latenti (Planner, OuterLink12, Critic, OuterLink23, Solver) per ogni round — 15 punti in totale, aggiornati live
 
-Ogni punto è la rappresentazione interna di un agente dopo quel round.
-Blu = Planner, Ciano = OuterLink12, Arancio = Critic, Oro = OuterLink23, Verde = Solver.
-Le frecce viola mostrano come l'output del Solver rientra nel Planner per il round successivo.
+→ La **tabella di statistiche pipeline**: norma L2 e cosine similarity ad ogni passaggio tra agenti
 
-Ma la cosa più interessante è nella tabella sotto:
-
-[screenshot pipeline stats]
-
-Le OuterLinks — i moduli che trasferiscono informazioni tra agenti — proiettano in modo quasi ortogonale (cosine ≈ 0).
-
-Non trasportano il "significato" da un agente all'altro. Lo trasformano completamente.
-
-Ogni agente riceve un vettore in uno spazio semantico suo, non una versione scalata del precedente.
-
-Questo non era mai stato visualizzato numericamente.
-
-Il codice è open-source, link in bio.
-
-#MultiAgentSystems #HuggingFace #OpenSource #AIResearch #RecursiveMAS
+[Screenshot PCA Journey]
 
 ---
 
-## POST 3 — Launch
-**Quando pubblicare**: appena hai un URL HF Spaces attivo (o subito con solo GitHub + Colab)
-**Formato**: testo + video screencast 60 secondi da Colab
+**La scoperta**
+
+Il dato più interessante è nella tabella:
+
+| Transizione | Cosine similarity |
+|---|---|
+| Planner → outer_12 → Critic | **−0.015** |
+| Critic → outer_23 → Solver | **−0.003** |
+
+Le OuterLinks proiettano in modo **quasi ortogonale**.
+
+Non portano il "significato" da un agente all'altro. Lo trasformano completamente.
+Ogni agente riceve un vettore in uno spazio semantico totalmente diverso — non una versione modificata del precedente.
+
+Questo pattern è stabile su tutti e 3 i round. Non era documentato da nessuna parte.
+
+[Screenshot tabella statistiche]
 
 ---
 
-Ho rilasciato la prima demo pubblica del ragionamento interno di RecursiveMAS.
+**Cosa significa**
 
-[video screencast 60s]
+Quando il Planner "pensa" a un problema e passa il risultato al Critic, il Critic non riceve una versione compressa di quel pensiero. Riceve qualcosa di ortogonale — una proiezione in un nuovo spazio che il Critic stesso sa come elaborare.
 
-Due feature che non esistevano prima:
-
-**1. Monitor spazio latente**
-Ogni round ricorsivo, vedi:
-— La traiettoria PCA dei vettori latenti tra i 3 agenti
-— La norma e la cosine similarity ad ogni passaggio (con indicatore ⊥ quando la proiezione è ortogonale)
-— Entropia e confidence del Solver, aggiornati live
-
-**2. Expert vs Learner**
-Qwen3-8B vs Qwen3-1.7B sullo stesso problema, 3 round di raffinamento.
-Il grafico mostra il delta di similarity: se scende, il modello più piccolo converge verso quello grande.
-
-Tutto open-source, modelli open-weight.
-
-→ GitHub: github.com/AlexBenin01/LatentScope
-→ Notebook Colab: nel repo, cartella notebooks/
-
-3 cose che ho scoperto costruendola:
-- Le OuterLinks di RecursiveMAS proiettano quasi ortogonalmente — ogni agente opera in uno spazio semantico separato, non in una versione modificata del precedente. Non era documentato.
-- Estrarre hidden states durante inference in un sistema multi-agente non è documentato quasi da nessuna parte.
-- Il paper ha 5 settimane. La finestra di opportunità su ricerche fresche è reale.
-
-#MultiAgentSystems #LLM #OpenSource #HuggingFace #AIResearch #RecursiveMAS
+È più simile a una traduzione tra lingue diverse che a un passaggio di un messaggio.
 
 ---
 
-## Note operative
+**Feature 2: Expert vs Learner**
 
-- **Orario ottimale**: martedì-giovedì ore 8-10 o 17-19
-- **Post 1 e 2** non richiedono URL live — escono subito
-- **Post 3** esce quando hai un URL (HF Spaces o anche solo Colab con ngrok temporaneo)
-- Rispondi ai commenti nelle prime 2 ore dopo ogni post per massimizzare la reach
+Ho aggiunto anche un confronto tra Qwen3-8B (Expert) e Qwen3-1.7B (Learner) sullo stesso problema, con 3 round di raffinamento iterativo.
+
+Il grafico mostra il delta di cosine similarity tra i due modelli: se scende, il modello più piccolo sta convergendo verso quello grande nello spazio latente.
+
+---
+
+**Link**
+
+→ GitHub + Notebook Colab: github.com/AlexBenin01/LatentScope
+→ Paper originale: arxiv.org/abs/2604.25917
+
+Tutto open-source, modelli open-weight, zero costi per eseguirlo.
+
+---
+
+#MultiAgentSystems #LLM #AIResearch #OpenSource #HuggingFace #RecursiveMAS #MachineLearning
+
+---
+
+## VARIANTE BREVE (se vuoi qualcosa di più diretto)
+
+Ho aperto il cofano di RecursiveMAS — il framework multi-agent di Stanford/UIUC/NVIDIA/MIT che fa collaborare LLM nello spazio latente.
+
+Scoperta: le OuterLinks che trasferiscono informazioni tra agenti proiettano con cosine ≈ 0.
+Non portano il significato. Lo trasformano completamente.
+
+Ho costruito un visualizzatore con traiettoria PCA live e tabella di statistiche per ogni passaggio.
+
+→ github.com/AlexBenin01/LatentScope
+
+[Screenshot PCA Journey]
+[Screenshot tabella statistiche]
+
+#MultiAgentSystems #LLM #OpenSource #RecursiveMAS

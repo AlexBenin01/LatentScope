@@ -13,53 +13,81 @@ hardware: zero-gpu
 
 # RecursiveMAS Latent Visualizer
 
-Prima demo pubblica che rende visibile il ragionamento interno di un Multi-Agent System ricorsivo.
+**Prima demo pubblica che rende visibile il ragionamento interno di un Multi-Agent System ricorsivo.**
+
 Basato su [RecursiveMAS](https://arxiv.org/abs/2604.25917) — Stanford · UIUC · NVIDIA · MIT (aprile 2026).
+
+---
 
 ## Demo
 
-→ Notebook Colab: scarica `notebooks/day1_setup.ipynb` e aprilo su Google Colab (runtime A100)
+Apri il notebook su Google Colab (runtime A100 consigliato):
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/AlexBenin01/LatentScope/blob/main/notebooks/day1_setup.ipynb)
+
+---
 
 ## Screenshots
 
+### Traiettoria vettoriale tra agenti — PCA 2D
+
 ![PCA Journey](assets/screenshot_pca_journey.png)
-*Traiettoria vettoriale completa tra agenti — PCA 2D con tutti e 5 i vettori per round*
+
+Ogni punto è il vettore latente (ultimo token, ultimo layer) di un agente dopo quel round.
+**Blu** = Planner · **Ciano** = OuterLink12 · **Arancio** = Critic · **Oro** = OuterLink23 · **Verde** = Solver
+Le **frecce viola** mostrano il passaggio `outer_31`: Solver → Planner del round successivo.
+
+---
+
+### Statistiche pipeline — norma e cosine similarity
 
 ![Pipeline Stats](assets/screenshot_pipeline_stats.png)
-*Statistiche pipeline: norma L2 e cosine similarity ad ogni transizione tra agenti*
+
+Norma L2 e cosine similarity ad ogni transizione tra agenti, per tutti e 3 i round.
+Le OuterLinks hanno cosine ≈ 0 — proiettano in modo **ortogonale** tra spazi semantici diversi.
+
+---
 
 ## Cosa fa
 
 ### Feature 1 — Monitor spazio latente
 
-Il sistema esegue 3 round ricorsivi con Sequential-Light (Planner → Critic → Solver, collegati da OuterLinks trainati). Visualizzazioni live aggiornate dopo ogni round:
+Inserisci una domanda. Il sistema esegue 3 round ricorsivi Sequential-Light:
 
-- **PCA 2D Journey** — traiettoria di tutti e 5 i vettori latenti per ogni round. Frecce colorate per round, frecce viola per i passaggi `outer_31` cross-round. Assi con varianza spiegata (%).
-- **Tabella statistiche pipeline** — norma L2 e cosine similarity ad ogni transizione. Le OuterLinks proiettano quasi ortogonalmente (cosine ≈ 0, marker `⊥`) — ogni agente opera in uno spazio semantico separato.
-- **Metriche Solver per round** — cosine similarity, entropia, top-5 confidence.
+```
+Planner (Qwen3-1.7B)
+  → outer_12 (2048→2048) ⊥
+Critic (Llama3.2-1B)
+  → outer_23 (2048→1536) ⊥
+Solver (Qwen2.5-Math-1.5B)
+  → outer_31 (1536→2048)
+Planner round successivo...
+```
+
+**Visualizzazioni live dopo ogni round:**
+- **PCA 2D Journey** — 15 punti (5 agenti × 3 round) con traiettorie colorate e frecce cross-round
+- **Tabella statistiche** — norma L2, variazione %, cosine similarity con indicatore `⊥` per proiezioni ortogonali
+- **Metriche Solver** — cosine similarity tra round, entropia, top-5 confidence
 
 ### Feature 2 — Expert (8B) vs Learner (1.7B)
 
-La stessa domanda viene elaborata in 3 round di raffinamento da Expert (Qwen3-8B) e Learner (Qwen3-1.7B). Il grafico del delta si aggiorna live dopo ogni round del Learner.
+Stesso problema, 3 round di raffinamento iterativo su due modelli di dimensione diversa.
+Grafico delta live che mostra la convergenza del modello più piccolo verso quello grande.
+
+---
 
 ## Scoperta emergente
 
-Le OuterLinks proiettano in modo **quasi ortogonale** tra agenti (cosine ≈ 0.0–0.06). Non preservano la direzione semantica — la trasformano completamente. Ogni agente riceve un vettore in uno spazio semantico nuovo, non una versione scalata del vettore precedente. Questo non era visualizzato numericamente in nessun lavoro precedente.
+Le OuterLinks proiettano con **cosine ≈ 0** tra agenti consecutivi — proiezione quasi ortogonale.
 
-## Architettura Sequential-Light
+Non trasportano il significato: lo **trasformano completamente**. Ogni agente lavora in uno spazio semantico suo. Nessun lavoro precedente aveva visualizzato questo numericamente.
 
-```
-Round r:
-  Planner (Qwen3-1.7B)
-    → outer_12 (2048→2048) ⊥
-  Critic (Llama3.2-1B)
-    → outer_23 (2048→1536) ⊥
-  Solver (Qwen2.5-Math-1.5B)
-    → outer_31 (1536→2048)
-  Planner round r+1...
+| Transizione | Round 1 | Round 2 | Round 3 |
+|---|---|---|---|
+| outer_12 cosine | -0.015 ⊥ | -0.001 ⊥ | +0.023 ⊥ |
+| outer_23 cosine | -0.003 ⊥ | +0.030 ⊥ | +0.056 ⊥ |
 
-Round 3 → Planner genera risposta finale in italiano
-```
+---
 
 ## Setup locale
 
@@ -67,15 +95,16 @@ Round 3 → Planner genera risposta finale in italiano
 git clone https://github.com/AlexBenin01/LatentScope
 cd LatentScope
 pip install -r requirements.txt
-
-python app.py   # richiede GPU ≥ 10 GB VRAM per Feature 1
+python app.py   # GPU ≥ 10 GB VRAM per Feature 1
 ```
 
-## Test (no GPU richiesto)
+## Test (no GPU)
 
 ```bash
 pytest tests/
 ```
+
+---
 
 ## Paper originale
 
